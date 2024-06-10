@@ -40,3 +40,10 @@ Frameworks used:
     matplotlib - to plot the stocks data,
     scikitlearn - for data normalization
 
+
+Clear the output and metadata:
+    Since .gitattributes is already presented, we need to edit local git config. This can be achieved with the following command:
+        git config --local --edit
+    after that we need to add this line to the config:
+        [filter "strip-notebook-output"]
+        clean = "jupyter nbconvert --ClearOutputPreprocessor.enabled=True --ClearMetadataPreprocessor.enabled=True --to=notebook --stdin --stdout --log-level=ERROR"
