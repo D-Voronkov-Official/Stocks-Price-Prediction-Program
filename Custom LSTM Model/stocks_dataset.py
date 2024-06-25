@@ -8,6 +8,7 @@
 """
 
 import glob
+import os
 from torch.utils.data import Dataset
 import pandas as pd
 import numpy as np
@@ -34,7 +35,13 @@ class StocksDataSet(Dataset):
     """
 
     def __init__(
-        self, root_directory, preparation_type=st.CustomSplit, split_percentage=0.80
+        self,
+        root_directory,
+        preparation_type=st.CustomSplit,
+        split_percentage=0.80,
+        standardized = True,
+        days_to_look = 90,
+        days_result = 30
     ):
         """Class constructor
 
@@ -44,6 +51,7 @@ class StocksDataSet(Dataset):
                Defaults to st.CustomSplit.
             split_percentage (float, optional): split percentage can be adjusted by the user. 
                 Defaults to 0.80.
+            standardized (boolean, optional): flag to decide whether the data should be standardized
 
         Raises:
             ValueError: If split type is not instance of CustomSplit
@@ -53,12 +61,15 @@ class StocksDataSet(Dataset):
             raise ValueError("Split type must have enum type!")
         self.prep_type = preparation_type
         self.split_percentage = split_percentage
-
+        self.standardized = standardized
         self.root = root_directory
         self.stocks_files = glob.glob(f"{self.root}/**/*.csv", recursive=True)
         self.stand_scaler = StandardScaler()
         self.mm_scaler = MinMaxScaler()
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        self.days_to_look = days_to_look
+        self.days_result = days_result
+        self.device = ("cuda" if torch.cuda.is_available() else "cpu")
 
     def __len__(self):
         return len(self.stocks_files)
@@ -124,27 +135,28 @@ class StocksDataSet(Dataset):
             y_train = torch.Tensor(y_full[:-1, :, :])
             y_test = torch.Tensor(y_full[-1:, :, :])
 
-        X_train = torch.Tensor(
-            self.stand_scaler.fit_transform(
-                X_train.reshape(-1, X_train.shape[-1])
-            ).reshape(X_train.shape)
-        )
-        X_test = torch.Tensor(
-            self.stand_scaler.transform(X_test.reshape(-1, X_test.shape[-1])).reshape(
-                X_test.shape
+        if self.standardized:
+            X_train = torch.Tensor(
+                self.stand_scaler.fit_transform(
+                    X_train.reshape(-1, X_train.shape[-1])
+                ).reshape(X_train.shape)
             )
-        )
+            X_test = torch.Tensor(
+                self.stand_scaler.transform(X_test.reshape(-1, X_test.shape[-1])).reshape(
+                    X_test.shape
+                )
+            )
 
-        y_train = torch.Tensor(
-            self.mm_scaler.fit_transform(
-                y_train.reshape(-1, y_train.shape[-1])
-            ).reshape(y_train.shape)
-        )
-        y_test = torch.Tensor(
-            self.mm_scaler.transform(y_test.reshape(-1, y_test.shape[-1])).reshape(
-                y_test.shape
+            y_train = torch.Tensor(
+                self.mm_scaler.fit_transform(
+                    y_train.reshape(-1, y_train.shape[-1])
+                ).reshape(y_train.shape)
             )
-        )
+            y_test = torch.Tensor(
+                self.mm_scaler.transform(y_test.reshape(-1, y_test.shape[-1])).reshape(
+                    y_test.shape
+                )
+            )
 
         return X_train, X_test, y_train, y_test
 
@@ -185,22 +197,28 @@ class StocksDataSet(Dataset):
         data = pd.read_csv(
             self.stocks_files[stock_index], index_col="Date", parse_dates=True
         )
+        
 
+        if data.shape[0] < 120:
+            #return None, None, None, None
+            raise ValueError("File must contain at least 120 rows!")
+        
+       
         if len(data.index) > 7000:
             data = data[5000:]
         data.replace([np.inf, -np.inf], np.nan, inplace=True)
         data.dropna(inplace=True)
         close = data["Close"]
         related_features = data.drop("Close", axis=1)
-
+       # print(os.path.basename(self.stocks_files[stock_index]))
         match self.prep_type:
             case st.ExperimentalSplit:
                 X_calc, y_calc = self.experimental_preparation(
-                    related_features, close, 90, 30
+                    related_features, close, self.days_to_look, self.days_result
                 )
             case st.CustomSplit:
                 X_calc, y_calc = self.prepare_data_for_mlmodel(
-                    related_features, close, 90, 30
+                    related_features, close, self.days_to_look, self.days_result
                 )
             case _:
                 raise ValueError("Unknown preparation type!")
