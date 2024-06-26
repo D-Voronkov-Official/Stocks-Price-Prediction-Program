@@ -19,18 +19,18 @@ from type_enums.SplitType import SplitType as st
 
 class StocksDataSet(Dataset):
     """
-        This class represents custom implementation of dataset
-        It basically takes path to the folder and get all the .csv stock files from it
-        Then it splits the files into the training and testing sets and returns them if we call
-        __getitem__ method
+    This class represents custom implementation of dataset
+    It basically takes path to the folder and get all the .csv stock files from it
+    Then it splits the files into the training and testing sets and returns them if we call
+    __getitem__ method
 
-        methods:
-            __init__ - constructor
-            __len__ - returns the amount of .csv files in the folder
-            prepare_data_for_mlmodel - split the X and y into adjustable timeframes
-            experimental_preparation - mostly the same as prepare_data_for_mlmodel 
-                but with different algorithm of splitting
-            split_data - splitting the data into training and testing sets
+    methods:
+        __init__ - constructor
+        __len__ - returns the amount of .csv files in the folder
+        prepare_data_for_mlmodel - split the X and y into adjustable timeframes
+        experimental_preparation - mostly the same as prepare_data_for_mlmodel
+            but with different algorithm of splitting
+        split_data - splitting the data into training and testing sets
 
     """
 
@@ -39,9 +39,9 @@ class StocksDataSet(Dataset):
         root_directory,
         preparation_type=st.CustomSplit,
         split_percentage=0.80,
-        standardized = True,
-        days_to_look = 90,
-        days_result = 30
+        standardized=True,
+        days_to_look=90,
+        days_result=30,
     ):
         """Class constructor
 
@@ -49,7 +49,7 @@ class StocksDataSet(Dataset):
             root_directory (String): path to the folder with .csv stock files
             preparation_type (SplitType (Enum), optional): How the data will be splitted.
                Defaults to st.CustomSplit.
-            split_percentage (float, optional): split percentage can be adjusted by the user. 
+            split_percentage (float, optional): split percentage can be adjusted by the user.
                 Defaults to 0.80.
             standardized (boolean, optional): flag to decide whether the data should be standardized
 
@@ -69,7 +69,7 @@ class StocksDataSet(Dataset):
 
         self.days_to_look = days_to_look
         self.days_result = days_result
-        self.device = ("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
     def __len__(self):
         return len(self.stocks_files)
@@ -77,7 +77,7 @@ class StocksDataSet(Dataset):
     def prepare_data_for_mlmodel(
         self, input_data, output_data, steps_for_input, steps_for_output
     ):
-        """ Custom Preparation of data for machine learning model
+        """Custom Preparation of data for machine learning model
 
         Args:
             input_data (dataframe): dataframe with features that will help us to predict data
@@ -110,13 +110,13 @@ class StocksDataSet(Dataset):
         """Splitting the X and y into training and testing datasets
 
         Args:
-            X_full (np.array): All features excluding Close price. 
+            X_full (np.array): All features excluding Close price.
             y_full (np.array): Close price that is converted into np.array
-            split_percentage (float, optional): how much data we are giving to the training set 
+            split_percentage (float, optional): how much data we are giving to the training set
                 Defaults to 0.80.
 
         Returns:
-            torch.Tensor: returns 4 Tensors, where X and y's are 
+            torch.Tensor: returns 4 Tensors, where X and y's are
                 splitted into training and testing sets (2 training and 2 testing sets accordingly)
         """
         total_data = len(X_full)
@@ -130,10 +130,11 @@ class StocksDataSet(Dataset):
         y_test = torch.Tensor(y_full[test_split:])
 
         if X_test.size(dim=0) == 0 or y_test.size(dim=0) == 0:
-            X_train = torch.Tensor(X_full[:-1, :, :])
-            X_test = torch.Tensor(X_full[-1:, :, :])
-            y_train = torch.Tensor(y_full[:-1, :, :])
-            y_test = torch.Tensor(y_full[-1:, :, :])
+            return None, None, None, None
+            # X_train = torch.Tensor(X_full[:-1, :, :])
+            # X_test = torch.Tensor(X_full[-1:, :, :])
+            # y_train = torch.Tensor(y_full[:-1, :, :])
+            # y_test = torch.Tensor(y_full[-1:, :, :])
 
         if self.standardized:
             X_train = torch.Tensor(
@@ -142,9 +143,9 @@ class StocksDataSet(Dataset):
                 ).reshape(X_train.shape)
             )
             X_test = torch.Tensor(
-                self.stand_scaler.transform(X_test.reshape(-1, X_test.shape[-1])).reshape(
-                    X_test.shape
-                )
+                self.stand_scaler.transform(
+                    X_test.reshape(-1, X_test.shape[-1])
+                ).reshape(X_test.shape)
             )
 
             y_train = torch.Tensor(
@@ -161,12 +162,22 @@ class StocksDataSet(Dataset):
         return X_train, X_test, y_train, y_test
 
     def experimental_preparation(
-        self,
-        input_data,
-        output_data,
-        steps_for_input,
-        steps_for_output
+        self, input_data, output_data, steps_for_input, steps_for_output
     ):
+        """Preparing the data for splitting before giving it to the model
+
+        Args:
+            input_data (dataframe): dataframe with features, based on which we want to predict
+            output_data (dataframe): dataframe with feature that we want to predict
+            steps_for_input (integer): how many days we will look in the past to predict
+            steps_for_output (integer): how many days in the future we will predict
+
+        Returns:
+            numpy array: returns 2 numpy arrays - first one - with the data on which model will make prediction
+                and second one with the results on which we will make
+                the assumption whether our mopdel predicts well enough to use it in real world
+        """
+
         X, y = [], []
 
         for i in range(len(input_data)):
@@ -183,7 +194,7 @@ class StocksDataSet(Dataset):
         return np.array(X), np.array(y)
 
     def __getitem__(self, stock_index):
-        """Gets the single .csv file from the folder and prepares it for the ML model 
+        """Gets the single .csv file from the folder and prepares it for the ML model
 
         Args:
             stock_index (string): path to the csv file
@@ -192,25 +203,24 @@ class StocksDataSet(Dataset):
             ValueError: Raised if preparation_type is not ExperimentalSplit or CustomSplit
 
         Returns:
-            Tensor: 4 tensors, 2 for training and 2 for testing 
+            Tensor: 4 tensors, 2 for training and 2 for testing
         """
         data = pd.read_csv(
             self.stocks_files[stock_index], index_col="Date", parse_dates=True
         )
-        
+
+        data = data.round(2)
 
         if data.shape[0] < 120:
-            #return None, None, None, None
+            # return None, None, None, None
             raise ValueError("File must contain at least 120 rows!")
-        
-       
+
         if len(data.index) > 7000:
             data = data[5000:]
         data.replace([np.inf, -np.inf], np.nan, inplace=True)
         data.dropna(inplace=True)
         close = data["Close"]
         related_features = data.drop("Close", axis=1)
-       # print(os.path.basename(self.stocks_files[stock_index]))
         match self.prep_type:
             case st.ExperimentalSplit:
                 X_calc, y_calc = self.experimental_preparation(
@@ -224,3 +234,12 @@ class StocksDataSet(Dataset):
                 raise ValueError("Unknown preparation type!")
 
         return self.split_data(X_calc, y_calc, self.split_percentage)
+
+    def print_file_name(self, stock_index):
+        """Prints current file name
+
+        Args:
+            stock_index (integer): file position inside the dataset
+                (in our case will be used during iteration)
+        """
+        print(os.path.basename(self.stocks_files[stock_index]))
