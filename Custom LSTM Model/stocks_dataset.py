@@ -130,11 +130,8 @@ class StocksDataSet(Dataset):
         y_test = torch.Tensor(y_full[test_split:])
 
         if X_test.size(dim=0) == 0 or y_test.size(dim=0) == 0:
-            return None, None, None, None
-            # X_train = torch.Tensor(X_full[:-1, :, :])
-            # X_test = torch.Tensor(X_full[-1:, :, :])
-            # y_train = torch.Tensor(y_full[:-1, :, :])
-            # y_test = torch.Tensor(y_full[-1:, :, :])
+            raise ValueError("Can't split tensor with current split percentage")
+         
 
         if self.standardized:
             X_train = torch.Tensor(
@@ -212,8 +209,7 @@ class StocksDataSet(Dataset):
         data = data.round(2)
 
         if data.shape[0] < 120:
-            # return None, None, None, None
-            raise ValueError("File must contain at least 120 rows!")
+            raise ValueError("File skipped because it contains less than 120 rows!")
 
         if len(data.index) > 7000:
             data = data[5000:]
@@ -232,14 +228,28 @@ class StocksDataSet(Dataset):
                 )
             case _:
                 raise ValueError("Unknown preparation type!")
+        
+        X_tr, X_t, y_tr, y_t = self.split_data(X_calc, y_calc, self.split_percentage)
 
-        return self.split_data(X_calc, y_calc, self.split_percentage)
+        return Ds_Data_Container(X_tr, X_t, y_tr, y_t, os.path.basename(self.stocks_files[stock_index]))
 
-    def print_file_name(self, stock_index):
-        """Prints current file name
 
-        Args:
-            stock_index (integer): file position inside the dataset
-                (in our case will be used during iteration)
-        """
-        print(os.path.basename(self.stocks_files[stock_index]))
+
+class Ds_Data_Container:
+    def __init__(self,
+                 X_train,
+                 X_test,
+                 y_train,
+                 y_test,
+                 file_name) -> None:
+        self.X_train = X_train
+        self._X_test = X_test
+        self.y_train = y_train
+        self.y_test = y_test
+        self.file_name = file_name
+    
+    def get_data(self):
+        return self.X_train, self._X_test, self.y_train, self.y_test
+    
+    
+    
