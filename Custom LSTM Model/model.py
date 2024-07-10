@@ -16,13 +16,12 @@ from type_enums.ModelType import ModelType as mt
 class StocksPredictionModel(nn.Module):
     """
     Let's break all the parameters down:
-        num_classes {integer} - how many features will our model have
-        hidden size {integer} - how many features in the hidden state
-                        (in our case - always 1, because we are looking for closing price,
-                            which is a 1 column otput (1 feature))
+        days_to_predict {integer} - how many days in the future we will want to predict on
+        hidden size {integer} - number that will start from in the hidden state
         num_layers {integer} - how deep our model is. In our case - always 1
         modelType {ModelType} - variable of Enum type, 
             determines whether the model will be simple or complex
+        columns_amount {integer} (optional) - how many features our model will have (in our case - always 16)
 
         methods:
             __init__ - class constructor
@@ -31,13 +30,15 @@ class StocksPredictionModel(nn.Module):
 
     def __init__(
         self,
-        num_classes,
+        days_to_predict,
         hidden_size,
         num_layers,
         batch_first=True,
-        input_size=16,
+        columns_amount=16,
         modelType=mt.ComplexModel,
         seed_number=None,
+        standardized =  True,
+        lr = 0.001
     ):
 
         if not isinstance(modelType, mt):
@@ -45,26 +46,29 @@ class StocksPredictionModel(nn.Module):
 
         super().__init__()
         self.kwargs = {
-            "num_classes": num_classes,
-            "input_size": input_size,
+            "days_to_predict": days_to_predict,
+            "columns_amount": columns_amount,
             "hidden_size": hidden_size,
             "num_layers": num_layers,
             "batch_first": batch_first,
             "modelType": modelType,
+            "standardized" : standardized
         }
 
-        self.input_size = input_size
+        self.input_size = columns_amount
+        self.standardized = standardized
         if seed_number is not None and isinstance(seed_number, Number):
             torch.manual_seed(seed_number)
         self.model_type = modelType
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         self.custom_ltsm = nn.LSTM(
-            input_size=input_size,
+            input_size=columns_amount,
             hidden_size=hidden_size,
             num_layers=num_layers,
             batch_first=batch_first,
         )
+        self.lr = lr
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         match self.model_type:
 
@@ -76,12 +80,12 @@ class StocksPredictionModel(nn.Module):
                     nn.ReLU(),
                     nn.Linear(64, 32),
                     nn.ReLU(),
-                    nn.Linear(32, num_classes),
+                    nn.Linear(32, days_to_predict),
                 )
 
             case mt.SimpleModel:
                 self.linear_sequence = nn.Sequential(
-                    nn.Linear(hidden_size, 64), nn.ReLU(), nn.Linear(64, num_classes)
+                    nn.Linear(hidden_size, 64), nn.ReLU(), nn.Linear(64, days_to_predict)
                 )
 
             case _:
