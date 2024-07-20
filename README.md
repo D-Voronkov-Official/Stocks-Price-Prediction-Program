@@ -50,3 +50,14 @@ a) Scripts:
     after that we need to add this line to the config:
         [filter "strip-notebook-output"]
         clean = "jupyter nbconvert --ClearOutputPreprocessor.enabled=True --ClearMetadataPreprocessor.enabled=True --to=notebook --stdin --stdout --log-level=ERROR"
+
+# How to work with the project:
+1) Reproduce the environment 
+                (steps can be found in the correlated section in the Readme file at the start of the document)
+2) Download the training data 
+                (by running **Getting Data For Machine Learning Model.ipynb** 
+                file which is located in **Machine Learning Data Gathering/Scripts** folder)
+3) Run the training model file 
+                (**Custom LSTM model/Training Model.ipynb**)
+4) Test the training model 
+                (**Custom LSTM model/models_testing/testing_models_script.ipynb**) (**NOTE:** Currently in development)
