@@ -1,4 +1,13 @@
 # Stocks Predictions Program
+
+# Navigation:
+
+1) [How to reproduce the environment](#how-to-reproduce-the-environment)
+2) [Project Structure](#project-structure)
+3) [Framework Used](#frameworks-used)
+4) [How to clear the output and metadata inside notebook](#clear-the-output-and-metadata)
+5) [Instruction about how to work with the project](#how-to-work-with-the-project)
+
 ## How to reproduce the environment:
 
 1) Download the project from GitHub
@@ -9,17 +18,17 @@ conda env create -p |*"PATH TO THE DESIRED FOLDER"*| --file=environment.yml
 
 
 
-# **Project Structure:**
+# Project Structure:
 
 ## 1) Custom LSTM Model folder
 
-### * **Files**:
+### * Files:
 
     a) * Stocks Predictions Model class * (blueprint) - Model.ipynb
     b) Data Set which gathers all the .csv files in the Data folder and split all the files into training and testing sets - StocksDataSet.ipynb
     c) Functions which trains the model with data set - Training Model.ipynb
 
-### * **Folders**:
+### * Folders:
 
     a) Models - Contains different trained models (which are trained with Training Model.ipynb
     b) Data - .csv files with stocks data for model training. Download functions can be found in "Machine Learning Data Gathering" folder, which resides inside the root of the project.
