@@ -211,8 +211,8 @@ class StocksDataSet(Dataset):
         if data.shape[0] < 120:
             raise ValueError("File skipped because it contains less than 120 rows!")
 
-        if len(data.index) > 7000:
-            data = data[5000:]
+        if len(data.index) > 1000:
+            data = data[-1000:]
         data.replace([np.inf, -np.inf], np.nan, inplace=True)
         data.dropna(inplace=True)
         close = data["Close"]
