@@ -19,13 +19,13 @@ class StocksPredictionModel(nn.Module):
         days_to_predict {integer} - how many days in the future we will want to predict on
         hidden size {integer} - number that will start from in the hidden state
         num_layers {integer} - how deep our model is. In our case - always 1
-        modelType {ModelType} - variable of Enum type, 
+        modelType {ModelType} - variable of Enum type,
             determines whether the model will be simple or complex
         columns_amount {integer} (optional) - how many features our model will have (in our case - always 16)
 
         methods:
             __init__ - class constructor
-            forward - predicting future stock prices 
+            forward - predicting future stock prices
     """
 
     def __init__(
@@ -37,8 +37,8 @@ class StocksPredictionModel(nn.Module):
         columns_amount=16,
         modelType=mt.ComplexModel,
         seed_number=None,
-        standardized =  True,
-        lr = 0.001
+        standardized=True,
+        lr=0.001,
     ):
 
         if not isinstance(modelType, mt):
@@ -52,9 +52,9 @@ class StocksPredictionModel(nn.Module):
             "num_layers": num_layers,
             "batch_first": batch_first,
             "modelType": modelType,
-            "standardized" : standardized
+            "standardized": standardized,
         }
-
+        self.days_to_predict = days_to_predict
         self.input_size = columns_amount
         self.standardized = standardized
         if seed_number is not None and isinstance(seed_number, Number):
@@ -75,17 +75,28 @@ class StocksPredictionModel(nn.Module):
             case mt.ComplexModel:
                 self.linear_sequence = nn.Sequential(
                     nn.Linear(hidden_size, 128),
-                    nn.ReLU(),
+                    nn.LeakyReLU(),
                     nn.Linear(128, 64),
-                    nn.ReLU(),
+                    nn.LeakyReLU(),
                     nn.Linear(64, 32),
-                    nn.ReLU(),
+                    nn.LeakyReLU(),
                     nn.Linear(32, days_to_predict),
                 )
 
             case mt.SimpleModel:
                 self.linear_sequence = nn.Sequential(
-                    nn.Linear(hidden_size, 64), nn.ReLU(), nn.Linear(64, days_to_predict)
+                    nn.Linear(hidden_size, 64),
+                    nn.LeakyReLU(),
+                    nn.Linear(64, days_to_predict),
+                )
+
+            case mt.ExperimentalModel:
+                self.linear_sequence = nn.Sequential(
+                    nn.Linear(hidden_size, 90),
+                    nn.LeakyReLU(),
+                    nn.Linear(90, 90),
+                    nn.LeakyReLU(),
+                    nn.Linear(90, days_to_predict),
                 )
 
             case _:
@@ -93,19 +104,24 @@ class StocksPredictionModel(nn.Module):
 
     # Basically forward function is what we should do with data
     def forward(self, data):
-        """ 
-            Forward function defines how the model should work with data
-            In our case it takes one parameter - stocks data
-            In our use case data is equivalent to X_train and X_test
-            It returns the output which later will be comapred with y_test and y_train
-            
-            Arguments:
-                data {tensor} - data on which we want to predict future values
+        """
+        Forward function defines how the model should work with data
+        In our case it takes one parameter - stocks data
+        In our use case data is equivalent to X_train and X_test
+        It returns the output which later will be comapred with y_test and y_train
+
+        Arguments:
+            data {tensor} - data on which we want to predict future values
         """
         data = data.to(self.device)
-        h0 = torch.zeros(self.num_layers, data.size(0), self.hidden_size).requires_grad_()
+        h0 = torch.zeros(
+            self.num_layers, data.size(0), self.hidden_size
+        ).requires_grad_()
 
-        c0 = torch.zeros(self.num_layers, data.size(0), self.hidden_size).requires_grad_()
+        c0 = torch.zeros(
+            self.num_layers, data.size(0), self.hidden_size
+        ).requires_grad_()
+
         h0 = h0.to(self.device)
 
         c0 = c0.to(self.device)
