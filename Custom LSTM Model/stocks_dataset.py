@@ -119,19 +119,32 @@ class StocksDataSet(Dataset):
             torch.Tensor: returns 4 Tensors, where X and y's are
                 splitted into training and testing sets (2 training and 2 testing sets accordingly)
         """
-        total_data = len(X_full)
+        if self.prep_type == st.QuarterSplit:
+            X_train = torch.Tensor(X_full[:-2])
+            X_test = torch.Tensor(X_full[-2:])
+            y_train = torch.Tensor(y_full[:-2])
+            y_test = torch.Tensor(y_full[-2:])
 
-        test_split = round(split_percentage * total_data)
+            y_train = y_train.squeeze()
+            y_test = y_test.squeeze()
 
-        X_train = torch.Tensor(X_full[:test_split])
-        X_test = torch.Tensor(X_full[test_split:])
+        else:
+            total_data = len(X_full)
 
-        y_train = torch.Tensor(y_full[:test_split])
-        y_test = torch.Tensor(y_full[test_split:])
+            test_split = round(split_percentage * total_data)
 
-        if X_test.size(dim=0) == 0 or y_test.size(dim=0) == 0:
+            X_train = torch.Tensor(X_full[:test_split])
+            X_test = torch.Tensor(X_full[test_split:])
+
+            y_train = torch.Tensor(y_full[:test_split])
+            y_test = torch.Tensor(y_full[test_split:])
+
+        if (
+            X_test.size(dim=0) == 0
+            or y_test.size(dim=0) == 0
+            or X_train.size(dim=0) == 1
+        ):
             raise ValueError("Can't split tensor with current split percentage")
-         
 
         if self.standardized:
             X_train = torch.Tensor(
@@ -170,7 +183,8 @@ class StocksDataSet(Dataset):
             steps_for_output (integer): how many days in the future we will predict
 
         Returns:
-            numpy array: returns 2 numpy arrays - first one - with the data on which model will make prediction
+            numpy array: returns 2 numpy arrays - first one - with the data on which model will
+                                                                                make prediction
                 and second one with the results on which we will make
                 the assumption whether our mopdel predicts well enough to use it in real world
         """
@@ -190,6 +204,57 @@ class StocksDataSet(Dataset):
 
         return np.array(X), np.array(y)
 
+    def split_quarterly(self, stocks_prices, close_price, earning_dates):
+        """Splits the stocks data and closing price into 2 numpy array
+
+        Args:
+            stocks_prices (df): dataframe with all the necessary stocks data (except price)
+            close_price (df): dataframe with closing price and related date
+            earning_dates (df): dataframe with the stock earning prices (we will use date column from this df)
+
+        Raises:
+            ValueError: occurs when the function returns empty array. Exception is needed to prevent adding empty
+            dataset into training data
+
+        Returns:
+            Numpy array: returns x and y numpy array, which will be splitted into training and testing datasets later
+        """
+        pd.options.mode.chained_assignment = None
+        earning_dates["Earnings Date"] = earning_dates["Earnings Date"].values[::-1]
+
+        X, y = [], []
+
+        earning_dates["Earnings Date"] = pd.to_datetime(earning_dates["Earnings Date"])
+
+        for i in range(0, len(earning_dates.index) - 2, 1):
+
+            stocks_prices["Date"] = pd.to_datetime(stocks_prices["Date"]).dt.normalize()
+
+            X_data = stocks_prices[
+                (stocks_prices["Date"] > earning_dates.loc[i, "Earnings Date"])
+                & (stocks_prices["Date"] < earning_dates.loc[i + 1, "Earnings Date"])
+            ]
+            close_data = close_price["Close"][
+                close_price["Date"].between(
+                    earning_dates.loc[i + 1, "Earnings Date"],
+                    earning_dates.loc[i + 2, "Earnings Date"],
+                )
+            ]
+
+            if len(X_data.index) < 60 or len(close_data.index) < 60:
+                continue
+            X_full = X_data[-60:]
+            X_full.drop("Date", axis=1, inplace=True)
+
+            X.append(X_full)
+            sliced_close = close_data[:60]
+            sliced_final = pd.DataFrame({"Close": sliced_close})
+            y.append(sliced_final)
+        # If, by any chance, the array is empty - throw an exception
+        if len(X) == 0:
+            raise ValueError("Nothing was added, skip!")
+        return np.array(X), np.array(y)
+
     def __getitem__(self, stock_index):
         """Gets the single .csv file from the folder and prepares it for the ML model
 
@@ -202,20 +267,29 @@ class StocksDataSet(Dataset):
         Returns:
             Tensor: 4 tensors, 2 for training and 2 for testing
         """
+
         data = pd.read_csv(
             self.stocks_files[stock_index], index_col="Date", parse_dates=True
         )
 
         data = data.round(2)
+        data.drop(["Open", "High", "Low"], inplace=True, axis=1)
 
-        if data.shape[0] < 120:
-            raise ValueError("File skipped because it contains less than 120 rows!")
+        if data.shape[0] < 1000:
+            raise ValueError("File skipped because it contains less than 1000 rows!")
 
-        if len(data.index) > 1000:
+        if self.prep_type == st.QuarterSplit:
+            data = data[-3000:]
+        else:
             data = data[-1000:]
+
         data.replace([np.inf, -np.inf], np.nan, inplace=True)
         data.dropna(inplace=True)
-        close = data["Close"]
+        if self.prep_type == st.QuarterSplit:
+            data = data.reset_index()
+            close = data[["Date", "Close"]]
+        else:
+            close = data["Close"]
         related_features = data.drop("Close", axis=1)
         match self.prep_type:
             case st.ExperimentalSplit:
@@ -226,30 +300,43 @@ class StocksDataSet(Dataset):
                 X_calc, y_calc = self.prepare_data_for_mlmodel(
                     related_features, close, self.days_to_look, self.days_result
                 )
+            case st.QuarterSplit:
+                earning_path = f"./Data/Earnings Dates/{os.path.basename(self.stocks_files[stock_index]).removesuffix('.csv')}_earnings.csv"
+
+                if not os.path.isfile(earning_path):
+                    raise ValueError(f"No earnings for the {earning_path} file, skip!")
+                earnings_dates = pd.read_csv(earning_path)
+                X_calc, y_calc = self.split_quarterly(
+                    related_features, close, earning_dates=earnings_dates
+                )
             case _:
                 raise ValueError("Unknown preparation type!")
-        
+
         X_tr, X_t, y_tr, y_t = self.split_data(X_calc, y_calc, self.split_percentage)
 
-        return Ds_Data_Container(X_tr, X_t, y_tr, y_t, os.path.basename(self.stocks_files[stock_index]))
-
+        return Ds_Data_Container(
+            X_tr, X_t, y_tr, y_t, os.path.basename(self.stocks_files[stock_index])
+        )
 
 
 class Ds_Data_Container:
-    def __init__(self,
-                 X_train,
-                 X_test,
-                 y_train,
-                 y_test,
-                 file_name) -> None:
+    """
+    This class serves as a container that contains all the necessary data for training 
+                                                        + current file name.
+    That way we can easily track on what file we are working now.
+    """
+
+    def __init__(self, X_train, X_test, y_train, y_test, file_name) -> None:
         self.X_train = X_train
         self._X_test = X_test
         self.y_train = y_train
         self.y_test = y_test
         self.file_name = file_name
-    
+
     def get_data(self):
+        """Return all the trainig/testing data
+
+        Returns:
+            4 Tensors: 2 for the training + 2 for the testing
+        """
         return self.X_train, self._X_test, self.y_train, self.y_test
-    
-    
-    
